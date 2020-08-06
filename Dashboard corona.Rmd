@@ -1,0 +1,254 @@
+---
+title: "Rajasthan Dashboard for Covid19"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+
+```{r Load libraries, include=FALSE}
+library("flexdashboard")
+library("covid19.analytics")
+library("shiny")
+library("tidyverse")
+library("leaflet")
+library("plotly")
+library("DT")
+library("fs")
+library("wbstats")
+library("ggplot2")
+
+```
+
+```{r Read Data from url, include=FALSE}
+
+C19_district_data  <- read.csv(url("https://api.covid19india.org/csv/latest/district_wise.csv"), header=TRUE)
+
+C19_TS_data <- read.csv(url("https://api.covid19india.org/csv/latest/districts.csv"	),header=TRUE)
+
+
+
+st_tst_vent_hbed <- read.csv(url("https://api.covid19india.org/csv/latest/statewise_tested_numbers_data.csv"), header=TRUE)
+
+raj_dnsty_ppltn <-  read.csv(url("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRQfWNoDHnhvBpWJVgDckmmiJw7RL67PTOHIeKxrf_IlJ5Purp2mkvhxei_N2rLVroDccH4vs7aOU-/pub?gid=0&single=true&output=csv"), header=TRUE)
+
+```
+
+
+```{r Data  exrtracted-c19, include=FALSE}
+
+Rajasthan_data <- subset(C19_district_data,State=="Rajasthan",select=c(3:ncol(C19_district_data)-2))
+
+ SRajasthanData <- Rajasthan_data[,5: ncol(Rajasthan_data)]
+
+
+ C19_Rajasthan_TS_data <- subset(C19_TS_data,State=="Rajasthan",select=c(3:ncol(C19_TS_data)-2))
+ district= "Jaipur"
+ C19_district_TS_data <- subset(C19_TS_data,State=="Rajasthan" & District == district,select=c(3:ncol(C19_TS_data)-2))
+
+
+
+ census_data_distrct <-  subset(raj_dnsty_ppltn, District == district)
+ppln<-census_data_distrct$Population
+
+
+```
+
+```{r Plots, include=FALSE}
+
+
+
+
+Plot_recovered_Deceased <- ggplot(Rajasthan_data,aes(y= District,x= (Rajasthan_data$Deceased*100)/Recovered )) +     geom_point()
+
+plot1 <- ggplotly(Plot_recovered_Deceased, tooltip ="all")
+
+```
+
+
+
+
+
+```{r JHU data-aggregated, include=FALSE}
+
+World_Data <- subset(covid19.data("aggregated"))
+India_Data <- subset(covid19.data("aggregated"),Country_Region =="India")
+Rajasthan_Data <-  subset(covid19.data("aggregated"),Province_State =="Rajasthan")
+
+```
+
+
+```{r JHU time series data for India, include=FALSE}
+##JHU India Data
+IndiaTSData<-subset(covid19.data("ts-ALL"),Country.Region=="India")
+
+```
+
+```{r Time series plot state, include=FALSE}
+
+ 
+edate<-as.Date(C19_Rajasthan_TS_data$Date[nrow(C19_Rajasthan_TS_data)])
+sdate<- as.Date(C19_Rajasthan_TS_data$Date[1])
+ts_raj_conf <- ts(C19_Rajasthan_TS_data$Confirmed, 
+                  frequency = 1, 
+                  end = edate,
+                  start =sdate,
+                  
+                  )
+```
+
+```{r Time series plot for district, echo=FALSE}
+
+c19_plot_ts_data <-  C19_district_TS_data
+
+edate<-as.Date(c19_plot_ts_data $Date[nrow(c19_plot_ts_data )])
+
+                           
+                           
+sdate<- as.Date(c19_plot_ts_data$Date[1])
+
+ts_dstrct_conf <- ts(c19_plot_ts_data$Confirmed, 
+                  frequency = 1, 
+                  end = edate,
+                  start =sdate,
+                  )
+
+
+```
+
+
+```{r C19 to JHU format, include=FALSE}
+
+df <- data.frame(matrix
+                 (ncol = NROW(C19_Rajasthan_TS_data)+4, 
+                   nrow = 1
+                   )
+                 )
+
+##note length of both column vectors have to same before assigning colnames 
+
+colnames(df) <-append(c
+                      ("Province.State",
+                        "Country.Region", "lang", "lat"
+                        ),
+                      C19_Rajasthan_TS_data$Date
+                      )
+df[,1]="Jaipur"
+df[,2]="Rajasthan"
+df[,3]=75.78781
+ df[,4]=26.91962
+ 
+
+for ( i in 1:nrow(C19_Rajasthan_TS_data)) 
+{df[ ,i+4] <- C19_Rajasthan_TS_data$Confirmed[i]}
+ 
+ #RajasthanTSData<-subset(TSData,Province.State=="Rajasthan")
+
+#View(RajasthanTSData)
+ 
+```
+
+
+```{r include=FALSE}
+traceback()
+```
+Visual analytics
+===========================================
+
+Column {.tabset}
+-------------------------------------
+
+
+
+### Table
+```{r District  table}
+
+datatable(
+  SRajasthanData,
+  extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = 
+      list('copy', 'print', list(
+        extend = 'collection',
+        buttons = c('csv', 'excel', 'pdf'),
+        text = 'Download'
+      ))
+    
+  )
+)
+```
+
+###  Rajasthan
+```{r Display ts}
+plot(ts_raj_conf)
+```
+
+### Jaipur -Time series
+
+```{r Time series district}
+plot(ts_dstrct_conf)
+```
+
+
+ % deceased- recovered
+======================================
+ 
+Column
+ 
+```{r recovered vs Deceased plot, echo=FALSE}
+plot1 
+
+```
+
+
+
+
+Maps
+===========================================
+
+Column {.tabset}
+-------------------------------------
+
+
+
+### Corona -World 
+```{r World Map}
+
+
+live.map(
+  World_Data,
+  select.projctn = FALSE,
+  projctn = "orthographic",
+  title = "WORLD MAP OF CASE",
+  no.legend = TRUE,
+  szRef = 0.8,
+  fileName = NULL,
+  interactive.display = TRUE
+)
+
+```
+
+### Corona India
+
+
+```{r India Map}
+
+live.map(
+  data = India_Data,
+  select.projctn = FALSE,
+  projctn = "orthographic",
+  title = "WORLD MAP OF CASE",
+  no.legend = TRUE,
+  szRef = 0.8,
+  fileName = NULL,
+  interactive.display = TRUE
+)
+
+```
+
+
+
+
+
+
